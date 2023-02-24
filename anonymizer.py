@@ -83,11 +83,31 @@ class Anonymizer():
         self.function_map = {
             'digits': self.__randomize_digits,
             'chars': self.__randomize_chars,
-            'fname': (self.__get_anonymized_value, self.replacement_dict['fnames']),
-            'lname': (self.__get_anonymized_value, self.replacement_dict['lnames']),
-            'email': (self.__get_anonymized_value, self.replacement_dict['emails']),
-            'street_name': (self.__get_anonymized_value, self.replacement_dict['streets']),
-            'city': (self.__get_anonymized_value, self.replacement_dict['cities']),
+            'fname': {
+                'function': self.__get_anonymized_value,
+                'replacement_list': self.replacement_dict['fnames'],
+                'current_value': None
+            },
+            'lname': {
+                'function': self.__get_anonymized_value,
+                'replacement_list': self.replacement_dict['lnames'],
+                'current_value': None
+            },
+            'email': {
+                'function': self.__get_anonymized_value,
+                'replacement_list': self.replacement_dict['emails'],
+                'current_value': None
+            },
+            'street_name': {
+                'function': self.__get_anonymized_value,
+                'replacement_list': self.replacement_dict['streets'],
+                'current_value': None
+            },
+            'city': {
+                'function': self.__get_anonymized_value,
+                'replacement_list': self.replacement_dict['cities'],
+                'current_value': None
+            },
             'post_code': self.__get_random_postcode,
             'phone': self.__get_random_nz_phone
         }
@@ -102,6 +122,9 @@ class Anonymizer():
         #     'post_code': self.__get_random_postcode,
         #     'phone': self.__get_random_nz_phone
         # }
+    
+    def __get_anonymized_value(self, source_list):
+        return source_list[randint(0, len(source_list) - 1)]
 
     def __randomize_digits(self, digits):
         new_digits = ''
@@ -117,34 +140,6 @@ class Anonymizer():
             elif char.isupper():
                 new_word = new_word + choice(self.LETTERS_UPPER)
         return new_word
-    
-    def __get_anonymized_value(self, source_list):
-        return source_list[randint(0, len(source_list) - 1)]
-    
-    def __get_random_first_name(self, _):
-        if self.first_name is None:
-            self.first_name = self.__get_anonymized_value(self.replacement_dict['fnames'])
-        return self.first_name
-        
-    def __get_random_last_name(self, _):
-        if self.last_name is None:
-            self.last_name = self.__get_anonymized_value(self.replacement_dict['lnames'])
-        return self.last_name
-    
-    def __get_random_email(self, _):
-        if self.email_address is None:
-            self.email_address = self.__get_anonymized_value(self.replacement_dict['emails'])
-        return self.email_address
-    
-    def __get_random_city(self, _):
-        if self.city is None:
-            self.city = self.__get_anonymized_value(self.replacement_dict['cities'])
-        return self.city
-    
-    def __get_random_street(self, _):
-        if self.street is None:
-            self.street = self.__get_anonymized_value(self.replacement_dict['streets'])
-        return self.street
     
     def __get_random_postcode(self, _):
         if self.post_code is None:
@@ -167,11 +162,16 @@ class Anonymizer():
                         continue
                     
                     randomizer_function = self.function_map[key]
-                    if type(randomizer_function) is tuple:
-                        print(randomizer_function)
-                        randomized_value = randomizer_function[0](randomizer_function[1])
+                    if type(randomizer_function) is dict:
+                        if randomizer_function['current_value'] is None:
+                            randomized_value = randomizer_function['function'](randomizer_function['replacement_list'])
+                            randomizer_function['current_value'] = randomized_value
+                        else:
+                            randomized_value = randomizer_function['current_value']
                     else:
+                        print(match_dict[key], key)
                         randomized_value = randomizer_function(match_dict[key])
+
                     self.row[field] = self.row[field].replace(match_dict[key], randomized_value)
             else:
                 pass
@@ -225,6 +225,7 @@ if __name__ == '__main__':
             regex_pattern = config['Regex_Patterns'][pattern_name]
             field_to_pattern[key] = regex_pattern
             
+        print(field_to_pattern)
         df = pd.read_csv(data_file)
         df = df.astype(str)
         
