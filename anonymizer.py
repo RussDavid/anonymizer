@@ -9,40 +9,57 @@ import pandas as pd
 import faker
 
 class AnonymizerWrapper():
-    first_names, last_names, email_addresses = [], [], []
-    house_nos, streets, cities = [], [], []
-    field_pattern_dict = {}
+    NAMED_GROUP_PATTERN = re.compile(r'\(\?P<\w*>.+\)')
     
-    @classmethod
-    def init_anonymizer(cls, _field_pattern_dict):
-        cls.field_pattern_dict = _field_pattern_dict
+    def __init__(self, _field_pattern_mapping, _custom_replacement_values) -> None:
+        self.field_pattern_mapping = _field_pattern_mapping
+        
+        self.custom_replacement_values = _custom_replacement_values
+        self.__validate_regex_pattern()
+       
+        self.__build_replacement_value_lists()
+        self.replacement_values = {
+            'fnames': self.first_name_values,
+            'lnames': self.last_name_values,
+            'emails': self.email_address_values,
+            'house_nums': self.house_no_values,
+            'streets': self.street_values,
+            'cities': self.city_values
+        }
+        if _custom_replacement_values is not None:
+            for regex_group_key in _custom_replacement_values:
+                self.replacement_values[regex_group_key] = _custom_replacement_values[regex_group_key]
+            
+    def __build_replacement_value_lists(self):
+        self.first_name_values = []
+        self.last_name_values = []
+        self.email_address_values = []
+        self.house_no_values = []
+        self.street_values = []
+        self.city_values = []
         
         fake = faker.Faker()
         faker.Faker.seed(0)
+        for _ in range(25):
+            self.first_name_values.append(fake.first_name())
+            self.last_name_values.append(fake.last_name())
+            self.email_address_values.append(fake.email())
+            self.house_no_values.append(fake.building_number())
+            self.street_values.append(fake.street_address())
+            self.city_values.append(fake.city())
         
-        for _ in range(5000):
-            cls.first_names.append(fake.first_name())
-            cls.last_names.append(fake.last_name())
-            cls.email_addresses.append(fake.email())
-            cls.house_nos.append(fake.building_number())
-            cls.streets.append(fake.street_address())
-            cls.cities.append(fake.city())
             
+    def __validate_regex_pattern(self):
+        for pattern in self.field_pattern_mapping.values():
+            if re.search(pattern=self.NAMED_GROUP_PATTERN, string=pattern) is None:
+                raise re.error(msg=f'The Regular Expression: {pattern} is invalid, it does not contain a named group')
             
-    def anonymize_record(cls, field_name):
+    def anonymize_record(self, _row):
         try:
-            replacement_dict = {
-                'fnames': cls.first_names,
-                'lnames': cls.last_names,
-                'emails': cls.email_addresses,
-                'house_nums': cls.house_nos,
-                'streets': cls.streets,
-                'cities': cls.cities
-            }
+            anon = Anonymizer(row=_row,
+                              replacement_dict=self.replacement_values,
+                              field_pattern_dict=self.field_pattern_mapping)
             
-            anon = Anonymizer(row=field_name,  
-                              replacement_dict=replacement_dict,
-                              field_pattern_dict=cls.field_pattern_dict)
             return anon.randomize_fields()
         except Exception as err:
             print(err)
@@ -50,7 +67,6 @@ class AnonymizerWrapper():
         
         
 class Anonymizer():
-    NAMED_GROUP_PATTERN = re.compile(r'\(\?P<\w*>.+\)')
     LETTERS_LOWER = string.ascii_lowercase
     LETTERS_UPPER = string.ascii_uppercase
     
@@ -67,21 +83,25 @@ class Anonymizer():
         self.function_map = {
             'digits': self.__randomize_digits,
             'chars': self.__randomize_chars,
-            'fname': self.__get_random_first_name,
-            'lname': self.__get_random_last_name,
-            'email': self.__get_random_email,
-            'street_name': self.__get_random_street,
-            'city': self.__get_random_city,
+            'fname': (self.__get_anonymized_value, self.replacement_dict['fnames']),
+            'lname': (self.__get_anonymized_value, self.replacement_dict['lnames']),
+            'email': (self.__get_anonymized_value, self.replacement_dict['emails']),
+            'street_name': (self.__get_anonymized_value, self.replacement_dict['streets']),
+            'city': (self.__get_anonymized_value, self.replacement_dict['cities']),
             'post_code': self.__get_random_postcode,
             'phone': self.__get_random_nz_phone
         }
-
-        self.__validate_regex_pattern()
-        
-    def __validate_regex_pattern(self):
-        for pattern in self.field_pattern_dict.values():
-            if re.search(pattern=self.NAMED_GROUP_PATTERN, string=pattern) is None:
-                raise re.error(msg=f'The Regular Expression: {pattern} is invalid, it does not contain a named group')
+        # self.function_map = {
+        #     'digits': self.__randomize_digits,
+        #     'chars': self.__randomize_chars,
+        #     'fname': self.__get_random_first_name,
+        #     'lname': self.__get_random_last_name,
+        #     'email': self.__get_random_email,
+        #     'street_name': self.__get_random_street,
+        #     'city': self.__get_random_city,
+        #     'post_code': self.__get_random_postcode,
+        #     'phone': self.__get_random_nz_phone
+        # }
 
     def __randomize_digits(self, digits):
         new_digits = ''
@@ -100,7 +120,7 @@ class Anonymizer():
     
     def __get_anonymized_value(self, source_list):
         return source_list[randint(0, len(source_list) - 1)]
-        
+    
     def __get_random_first_name(self, _):
         if self.first_name is None:
             self.first_name = self.__get_anonymized_value(self.replacement_dict['fnames'])
@@ -147,7 +167,11 @@ class Anonymizer():
                         continue
                     
                     randomizer_function = self.function_map[key]
-                    randomized_value = randomizer_function(match_dict[key])
+                    if type(randomizer_function) is tuple:
+                        print(randomizer_function)
+                        randomized_value = randomizer_function[0](randomizer_function[1])
+                    else:
+                        randomized_value = randomizer_function(match_dict[key])
                     self.row[field] = self.row[field].replace(match_dict[key], randomized_value)
             else:
                 pass
@@ -213,10 +237,10 @@ if __name__ == '__main__':
         print(traceback.format_exc())
     
     try:
-        anonymizer = AnonymizerWrapper()
-        anonymizer.init_anonymizer(field_to_pattern)
+        anonymizer = AnonymizerWrapper(field_to_pattern, None)
         
         df_anon = df.apply(lambda x: anonymizer.anonymize_record(x), axis=1)
         print(df_anon)
     except Exception as e:
+        print('Exception occured')
         print(traceback.format_exc())

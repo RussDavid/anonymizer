@@ -1,5 +1,5 @@
-customerID,customerTokens,defaultContactAddress,loyaltyFirstName
-3215,MRXX12345,russ@mail.com:10 Street:Auckland:0632,Russ
-3266,MRXX12345,russ@mail.com:10 Street:Auckland:0632,Russ
-3256,MRXX12345,jim@mail:123:kk:3133,XYZ
-3299,MRXX12345,jim@mail:123:kk:3133,XYZ
+customerID,customerTokens,defaultContactAddress,loyaltyFirstName,xname
+3215,MRXX12345,russ@mail.com:10 Street:Auckland:0632,Russ,x
+3266,MRXX12345,russ@mail.com:10 Street:Auckland:0632,Russ,x
+3256,MRXX12345,jim@mail:123:kk:3133,XYZ,x
+3299,MRXX12345,jim@mail:123:kk:3133,XYZ,x
