@@ -4,15 +4,18 @@ import traceback
 import string
 import argparse
 import configparser
-from time import perf_counter
+import logging
+import time
 from random import randint, choice
 import pandas as pd
 import faker
 
+
 class AnonymizerConfigurator():
     NAMED_GROUP_PATTERN = re.compile(r'\(\?P<\w*>.+\)')
 
-    def __init__(self, _field_pattern_mapping,
+    def __init__(self,
+                 _field_pattern_mapping,
                  _custom_replacement_values,
                  _no_of_values_to_generate,
                  _faker_seed) -> pd.Series:
@@ -24,14 +27,14 @@ class AnonymizerConfigurator():
         self.__build_replacement_value_lists()
 
     def __build_replacement_value_lists(self):
-        print('Generating values for replacement lists')
+        logger.info('Generating values for replacement lists')
         self.first_name_values, self.last_name_values = [], []
         self.house_no_values, self.street_values = [], []
         self.city_values, self.email_address_values = [], []
 
         fake = faker.Faker()
         faker.Faker.seed(self.faker_seed)
-        start_time = perf_counter()
+        start_time = time.perf_counter()
         for _ in range(self.no_of_values_to_generate):
             self.first_name_values.append(fake.first_name())
             self.last_name_values.append(fake.last_name())
@@ -39,9 +42,7 @@ class AnonymizerConfigurator():
             self.house_no_values.append(fake.building_number())
             self.street_values.append(fake.street_address())
             self.city_values.append(fake.city())
-        end_time = perf_counter()
-        print(f'Took {end_time - start_time} seconds to generate replacement lists')
-
+        end_time = time.perf_counter()
 
         self.replacement_values = {
             'fname': self.first_name_values,
@@ -51,6 +52,9 @@ class AnonymizerConfigurator():
             'street_name': self.street_values,
             'city': self.city_values
         }
+        logger.debug(f'Took {end_time - start_time:.{2}} seconds to generate '
+                     f'{self.no_of_values_to_generate * len(self.replacement_values)} '
+                     'replacement list values')
 
         if self.custom_replacement_values is not None:
             for regex_group_key in self.custom_replacement_values:
@@ -65,8 +69,8 @@ class AnonymizerConfigurator():
 
     def anonymize_record(self, _row):
         anon = RecordAnonymizer(row=_row,
-                            replacement_map=self.replacement_values,
-                            field_pattern_map=self.field_pattern_mapping)
+                                replacement_map=self.replacement_values,
+                                field_pattern_map=self.field_pattern_mapping)
         return anon.randomize_fields()
 
 
@@ -172,7 +176,7 @@ class RecordAnonymizer():
                     # the relevant function to anonoymize this regex group value
                     # Randomized values that are used across multiple columns are stored
                     match_group_randomizer = self.function_map[match_group_name]
-                    if match_group_randomizer.isinstance(dict):
+                    if isinstance(match_group_randomizer, dict):
                         if match_group_randomizer['current_value'] is None:
                             randomizer_function = match_group_randomizer['function']
                             random_replacement_values = match_group_randomizer['replacement_list']
@@ -180,7 +184,7 @@ class RecordAnonymizer():
                             match_group_randomizer['current_value'] = randomized_value
                         else:
                             randomized_value = match_group_randomizer['current_value']
-                    else: # This type of match group does not persist values across columns
+                    else:  # This type of match group does not persist values across columns
                         randomized_value = match_group_randomizer(match_group_value)
 
                     self.row[field] = self.row[field].replace(match_group_value, randomized_value)
@@ -188,8 +192,29 @@ class RecordAnonymizer():
 
 
 if __name__ == '__main__':
-    pattern_file = pathlib.Path('patterns.ini')
-    data_file = pathlib.Path('data.csv')
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+
+    console_handler = logging.StreamHandler()
+    file_handler = logging.FileHandler('anonymizer.log')
+    console_handler.setLevel(logging.DEBUG)
+    file_handler.setLevel(logging.DEBUG)
+
+    log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    console_handler.setFormatter(log_format)
+    file_handler.setFormatter(log_format)
+
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
+
+    pattern_file = pathlib.Path('demo', 'demo_config.ini')
+    data_file = pathlib.Path('demo', 'demo_data.csv')
+    output_file = pathlib.Path('demo', 'output.csv')
+
+    logger.info('-------------------------------')
+    logger.info('Data Anonymizer Started')
+    logger.info(time.asctime(time.localtime()))
+    logger.info('-------------------------------')
 
     parser = argparse.ArgumentParser(
         prog='Basic Data Anonymizer',
@@ -198,36 +223,40 @@ if __name__ == '__main__':
     parser.add_argument('--pattern-file-path', '-pf',
                         type=pathlib.Path,
                         default=pattern_file,
-                        help='The path to the file that contains the mapping of '\
-                            'fields to patterns as well as the regex pattern definitions. '\
-                            'Default Path: .\\patterns.txt')
+                        help='The path to the file that contains the mapping of '
+                        'fields to patterns as well as the regex pattern definitions. '
+                        'Default Path: .\\patterns.txt')
     parser.add_argument('--data-file-path', '-df',
                         type=pathlib.Path,
                         default=data_file,
-                        help='The path to the file that contains the data the anonymized. '\
-                            'Default Path: .\\data.csv')
+                        help='The path to the file that contains the data the anonymized. '
+                        'Default Path: .\\data.csv')
+    parser.add_argument('--output-file-path', '-of',
+                        type=pathlib.Path,
+                        default=output_file,
+                        help='The path and name of the file the anonymized data will be '
+                        'saved to. Default Path: .\\demo\\output.csv')
     parser.add_argument('--generate-values', '-gv',
                         type=int,
                         default=10000,
-                        help='The number of random replacement values each replacement list '\
-                            'should contain.  Default: 10,000')
+                        help='The number of random replacement values each replacement list '
+                        'should contain.  Default: 10,000')
     parser.add_argument('--faker-seed', '-fs',
                         type=int,
                         default=0,
-                        help='The seed value that Faker uses. Changing this will change which '\
-                            'values are selected to be populated into the replacement lists. '\
-                            'Default: 0')
+                        help='The seed value that Faker uses. Changing this will change which '
+                        'values are selected to be populated into the replacement lists. '
+                        'Default: 0')
     args = parser.parse_args()
 
-    if str(args.pattern_file_path) != str(pattern_file):
-        pattern_file = args.pattern_file_path
-    if str(args.data_file_path) != str(data_file):
-        data_file = args.data_file_path
+    logger.info(f'Using pattern file path: {str(args.pattern_file_path)}')
+    logger.info(f'Using data file Path: {str(args.data_file_path)}')
+    logger.info(f'Using output file: {str(args.output_file_path)}\n')
 
     try:
         config = configparser.ConfigParser()
         config.optionxform = str
-        config.read(pattern_file)
+        config.read(args.pattern_file_path)
 
         if 'Regex_Patterns' not in config:
             raise configparser.NoSectionError('Regex_Patterns')
@@ -239,48 +268,55 @@ if __name__ == '__main__':
         # e.g. 'first_name': '(?<fname>/w+)
         # Get the name of the associated pattern for this field contained in
         # the [Regex_Patterns] section
+        logger.info('Mapping fields to patterns')
         field_to_pattern = {}
-        for key in config['Field_Mapping']:
-            pattern_name = config['Field_Mapping'][key]
+        for field_name in config['Field_Mapping']:
+            pattern_name = config['Field_Mapping'][field_name]
             regex_pattern = config['Regex_Patterns'][pattern_name]
-            field_to_pattern[key] = regex_pattern
+            field_to_pattern[field_name] = regex_pattern
+        logger.debug('field_to_pattern dictionary: %s', field_to_pattern)
 
-        # Get the user created lists of replacement values from the config file
-        # This is read as a string which then needs to be converted to a list
+        # The path_regex pattern matches paths such as:
+        # C:/files/list.csv | /sensitive/data/people.txt
+        # data.csv | \backward\slashes\also\work.csv
         user_replacement_values = {}
         path_regex = re.compile(pattern=r'^(((\w+:*|\d+)?(\\|\/))*(\w+|\d+))+\.(csv|txt)\s*$',
                                 flags=re.IGNORECASE)
+        # Get the user created lists of replacement values from the config file
+        # This is read as a string which then needs to be converted to a list.
         if 'Replacement_Values' in config:
+            logger.info('Custom replacement values are defined')
             for replacement_key in config['Replacement_Values']:
                 replacement_values = config['Replacement_Values'][replacement_key]
-                # If the replacement value is a path instead of a list
-                # then the replacement values must be loaded from that file
+                # The replacement value can be a path to a CSV file containing a
+                # list of replacement values.
                 if re.match(path_regex, replacement_values):
                     replacement_value_file = pathlib.Path(replacement_values)
                     replacement_df = pd.read_csv(replacement_value_file, header=None)
                     file_values = replacement_df.iloc[0].values
                     user_replacement_values[replacement_key] = file_values
+
+                    logger.info('Loaded %d values for field %s in file: %s',
+                                len(file_values), replacement_key, str(replacement_value_file))
                 else:
                     replacement_values = replacement_values.removeprefix('[').removesuffix(']')
                     replacement_values = replacement_values.replace(', ', ',').split(',')
                     user_replacement_values[replacement_key] = replacement_values
 
-        df = pd.read_csv(data_file)
+        df = pd.read_csv(args.data_file_path)
         df = df.astype(str)
-
-        print('Finished initial configuration')
-        print('Creating Anonymizer object')
+        logger.debug('Loaded all files successfully, beginning anonymization')
 
         anonymizer = AnonymizerConfigurator(field_to_pattern, user_replacement_values,
                                             args.generate_values, args.faker_seed)
-        
+
         df_anon = df.apply(lambda x: anonymizer.anonymize_record(x), axis=1)
-        
+        df_anon.to_csv(output_file, index=False)
         print('Anonymized output:')
         print(df_anon)
     except configparser.NoSectionError as error:
         print(traceback.format_exc())
-        print(f'{error}\nPattern config file must both [Regex_Patterns] '\
+        print(f'{error}\nPattern config file must both [Regex_Patterns] '
               'and [Field_Mapping] sections')
     except re.error as error:
         print(traceback.format_exc())
@@ -301,4 +337,3 @@ if __name__ == '__main__':
         print(traceback.format_exc())
         print(e)
         print('Some other exception occurred.')
-        
