@@ -39,18 +39,18 @@ if __name__ == '__main__':
         description='Use this script to replace sensitive data with randomized data.'
     )
 
-    parser.add_argument('--pattern-file-path', '-pf',
+    parser.add_argument('--pattern-file-path', '-pfp',
                         type=pathlib.Path,
                         default=pattern_file,
                         help='The path to the file that contains the mapping of '
                         'fields to patterns as well as the regex pattern definitions. '
                         'Default Path: .\\patterns.txt')
-    parser.add_argument('--data-file-path', '-df',
+    parser.add_argument('--data-file-path', '-dfp',
                         type=pathlib.Path,
                         default=data_file,
                         help='The path to the file that contains the data the anonymized. '
                         'Default Path: .\\data.csv')
-    parser.add_argument('--output-file-path', '-of',
+    parser.add_argument('--output-file-path', '-ofp',
                         type=pathlib.Path,
                         default=output_file,
                         help='The path and name of the file the anonymized data will be '
@@ -66,18 +66,23 @@ if __name__ == '__main__':
                         help='The seed value that Faker uses. Changing this will change which '
                         'values are selected to be populated into the replacement lists. '
                         'Default: 0')
-    parser.add_argument('--replace-empty-values', '-re',
+    parser.add_argument('--replace-empty-values', '-rev',
                         action='store_true',
                         help='If this argument is passed then empty values in the input data '
                         'will be populated with anonymized data. By default blank values are not '
                         'populated with anything, left are left empty.')
+    parser.add_argument('--column-name-suffix', '-cns',
+                        default=None,
+                        type=str,
+                        help='Add this value to the end of anonymized columns in output data.')
 
     args = parser.parse_args()
 
-    option_config = {
+    argument_options = {
         'generate_values': args.generate_values,
         'faker_seed': args.faker_seed,
-        'replace_empty': args.replace_empty_values
+        'replace_empty': args.replace_empty_values,
+        'column_suffix': args.column_name_suffix
     }
 
     logger.info(f'Using pattern file located at path: {str(args.pattern_file_path)}')
@@ -142,9 +147,17 @@ if __name__ == '__main__':
         anon_config = anonymizer.AnonymizerConfigurator(
             field_pattern_mapping=field_to_pattern,
             custom_replacement_values=user_replacement_values,
-            config_options=option_config)
+            config_options=argument_options)
 
         df_anon = df.apply(lambda x: anon_config.anonymize_record(x), axis=1)
+
+        # If a column suffix was passed, append the suffix to all the column names
+        # that were anonymized
+        if argument_options['column_suffix'] is not None:
+            for field in field_to_pattern:
+                print(field)
+                df_anon = df_anon.rename(columns={field: field + argument_options['column_suffix']})
+
         logger.info(f'Completed anonymization, writing to file: {output_file}')
         df_anon = df_anon.replace('nan', '')
         df_anon.to_csv(output_file, index=False)
