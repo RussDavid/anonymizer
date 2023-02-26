@@ -1,5 +1,4 @@
 /.vscode
-/anoimizer.ipynb
-/patterns2.ini
-/test.csv
-/test.ini
+/demo/output.csv
+/patterns.ini
+/anonymizer.log

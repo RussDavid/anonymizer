@@ -15,15 +15,16 @@ class AnonymizerConfigurator():
     NAMED_GROUP_PATTERN = re.compile(r'\(\?P<\w*>.+\)')
 
     def __init__(self,
-                 _field_pattern_mapping,
-                 _custom_replacement_values,
-                 _no_of_values_to_generate,
-                 _faker_seed) -> pd.Series:
-        self.field_pattern_mapping = _field_pattern_mapping
-        self.custom_replacement_values = _custom_replacement_values
-        self.no_of_values_to_generate = _no_of_values_to_generate
-        self.faker_seed = _faker_seed
-        self.__validate_regex_pattern()
+                 field_pattern_mapping,
+                 custom_replacement_values,
+                 config_options,
+                 ) -> pd.Series:
+        self.field_pattern_mapping = field_pattern_mapping
+        self.custom_replacement_values = custom_replacement_values
+        self.no_of_values_to_generate = config_options['generate_values']
+        self.faker_seed = config_options['faker_seed']
+        self.replace_empty_values = config_options['replace_empty']
+        self.__validate_regex_patterns()
         self.__build_replacement_value_lists()
 
     def __build_replacement_value_lists(self):
@@ -61,16 +62,18 @@ class AnonymizerConfigurator():
                 self.replacement_values[regex_group_key] = \
                     self.custom_replacement_values[regex_group_key]
 
-    def __validate_regex_pattern(self):
+    def __validate_regex_patterns(self):
         for pattern in self.field_pattern_mapping.values():
             if re.search(pattern=self.NAMED_GROUP_PATTERN, string=pattern) is None:
+                logger.error(f'Invalid regex pattern: {pattern}')
                 raise re.error(msg=f'The Regular Expression: {pattern} is invalid, '
                                'it does not contain a named group')
 
     def anonymize_record(self, _row):
         anon = RecordAnonymizer(row=_row,
                                 replacement_map=self.replacement_values,
-                                field_pattern_map=self.field_pattern_mapping)
+                                field_pattern_map=self.field_pattern_mapping,
+                                replace_empty_values=self.replace_empty_values)
         return anon.randomize_fields()
 
 
@@ -78,13 +81,13 @@ class RecordAnonymizer():
     LETTERS_LOWER = string.ascii_lowercase
     LETTERS_UPPER = string.ascii_uppercase
 
-    def __init__(self, row, replacement_map, field_pattern_map) -> None:
+    def __init__(self, row, replacement_map, field_pattern_map, replace_empty_values) -> None:
         # TODO: move replacement_dict and field_pattern_dict init into
         # a class method
         self.row = row
         self.replacement_value_map = replacement_map
         self.field_pattern_map = field_pattern_map
-        self.validated_randomization_pattern = None
+        self.replace_empty_values = replace_empty_values
 
         self.first_name, self.last_name = None, None
         self.email_address, self.phone = None, None
@@ -168,8 +171,7 @@ class RecordAnonymizer():
             if match:
                 match_groups = match.groupdict()
                 for match_group_name, match_group_value in match_groups.items():
-                    # TODO: add option to replace empty values?
-                    if match_group_value in [None, '', 'nan']:
+                    if not self.replace_empty_values and match_group_value in [None, '', 'nan']:
                         continue
 
                     # From the function map get a function or dictionary containing
@@ -218,8 +220,9 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(
         prog='Basic Data Anonymizer',
-        description='Use this script to replace sensitive data with randomized data.',
+        description='Use this script to replace sensitive data with randomized data.'
     )
+    
     parser.add_argument('--pattern-file-path', '-pf',
                         type=pathlib.Path,
                         default=pattern_file,
@@ -247,11 +250,23 @@ if __name__ == '__main__':
                         help='The seed value that Faker uses. Changing this will change which '
                         'values are selected to be populated into the replacement lists. '
                         'Default: 0')
+    parser.add_argument('--replace-empty-values', '-re',
+                        action=argparse.BooleanOptionalAction,
+                        help='If this argument is passed then empty values in the input data '
+                        'will be populated with anonymized data. By default blank values are not '
+                        'populated with anything, left are left empty.')
+
     args = parser.parse_args()
 
-    logger.info(f'Using pattern file path: {str(args.pattern_file_path)}')
-    logger.info(f'Using data file Path: {str(args.data_file_path)}')
-    logger.info(f'Using output file: {str(args.output_file_path)}\n')
+    option_config = {
+        'generate_values': args.generate_values,
+        'faker_seed': args.faker_seed,
+        'replace_empty': args.replace_empty_values
+    }
+
+    logger.info(f'Using pattern file located at path: {str(args.pattern_file_path)}')
+    logger.info(f'Using output file located at path: {str(args.output_file_path)}\n')
+    logger.info(f'Using data file located at path: {str(args.data_file_path)}')
 
     try:
         config = configparser.ConfigParser()
@@ -296,21 +311,25 @@ if __name__ == '__main__':
                     file_values = replacement_df.iloc[0].values
                     user_replacement_values[replacement_key] = file_values
 
-                    logger.info('Loaded %d values for field %s in file: %s',
-                                len(file_values), replacement_key, str(replacement_value_file))
+                    logger.info('Loaded %d values for field: %s, in file: %s',
+                                len(file_values), replacement_key, str(replacement_value_file.name))
                 else:
                     replacement_values = replacement_values.removeprefix('[').removesuffix(']')
                     replacement_values = replacement_values.replace(', ', ',').split(',')
                     user_replacement_values[replacement_key] = replacement_values
 
         df = pd.read_csv(args.data_file_path)
+        logger.info(f'Input data has {len(df.columns)} columns and {len(df)} rows\n')
         df = df.astype(str)
-        logger.debug('Loaded all files successfully, beginning anonymization')
+        logger.info('Loaded all files successfully, beginning anonymization')
 
-        anonymizer = AnonymizerConfigurator(field_to_pattern, user_replacement_values,
-                                            args.generate_values, args.faker_seed)
+        anonymizer = AnonymizerConfigurator(field_pattern_mapping=field_to_pattern, 
+                                            custom_replacement_values=user_replacement_values,
+                                            config_options=option_config)
 
         df_anon = df.apply(lambda x: anonymizer.anonymize_record(x), axis=1)
+        logger.info(f'Completed anonymization, writing to file: {output_file}')
+        df_anon = df_anon.replace('nan', '')
         df_anon.to_csv(output_file, index=False)
         print('Anonymized output:')
         print(df_anon)
