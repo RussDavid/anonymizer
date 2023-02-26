@@ -14,16 +14,14 @@ import faker
 class AnonymizerConfigurator():
     NAMED_GROUP_PATTERN = re.compile(r'\(\?P<\w*>.+\)')
 
-    def __init__(self,
-                 field_pattern_mapping,
+    def __init__(self, field_pattern_mapping,
                  custom_replacement_values,
-                 config_options,
-                 ) -> pd.Series:
+                 config_options) -> pd.Series:
         self.field_pattern_mapping = field_pattern_mapping
         self.custom_replacement_values = custom_replacement_values
         self.no_of_values_to_generate = config_options['generate_values']
         self.faker_seed = config_options['faker_seed']
-        self.replace_empty_values = config_options['replace_empty']
+        self.replace_empty = config_options['replace_empty']
         self.__validate_regex_patterns()
         self.__build_replacement_value_lists()
 
@@ -69,11 +67,11 @@ class AnonymizerConfigurator():
                 raise re.error(msg=f'The Regular Expression: {pattern} is invalid, '
                                'it does not contain a named group')
 
-    def anonymize_record(self, _row):
-        anon = RecordAnonymizer(row=_row,
-                                replacement_map=self.replacement_values,
-                                field_pattern_map=self.field_pattern_mapping,
-                                replace_empty_values=self.replace_empty_values)
+    def anonymize_record(self, row):
+        RecordAnonymizer.initialize_record_anonymizer(replacement_value_map=self.replacement_values,
+                                                      field_pattern_map=self.field_pattern_mapping,
+                                                      replace_empty_values=self.replace_empty)
+        anon = RecordAnonymizer(row=row)
         return anon.randomize_fields()
 
 
@@ -81,69 +79,74 @@ class RecordAnonymizer():
     LETTERS_LOWER = string.ascii_lowercase
     LETTERS_UPPER = string.ascii_uppercase
 
-    def __init__(self, row, replacement_map, field_pattern_map, replace_empty_values) -> None:
-        # TODO: move replacement_dict and field_pattern_dict init into
-        # a class method
-        self.row = row
-        self.replacement_value_map = replacement_map
-        self.field_pattern_map = field_pattern_map
-        self.replace_empty_values = replace_empty_values
+    replacement_value_map = []
+    field_pattern_map = []
+    replace_empty_values = None
 
+    @classmethod
+    def initialize_record_anonymizer(cls, replacement_value_map, field_pattern_map,
+                                     replace_empty_values):
+        cls.replacement_value_map = replacement_value_map
+        cls.field_pattern_map = field_pattern_map
+        cls.replace_empty_values = replace_empty_values
+
+    def __init__(self, row, ) -> None:
+        self.row = row
         self.first_name, self.last_name = None, None
         self.email_address, self.phone = None, None
         self.city, self.street, self.post_code = None, None, None
 
         self.function_map = {
-            'digits': self.__randomize_digits,
-            'chars': self.__randomize_chars,
+            'digits': self._randomize_digits,
+            'chars': self._randomize_chars,
             'fname': {
-                'function': self.__get_anonymized_value,
+                'function': self._get_anonymized_value,
                 'replacement_list': self.replacement_value_map['fname'],
                 'current_value': None
             },
             'lname': {
-                'function': self.__get_anonymized_value,
+                'function': self._get_anonymized_value,
                 'replacement_list': self.replacement_value_map['lname'],
                 'current_value': None
             },
             'email': {
-                'function': self.__get_anonymized_value,
+                'function': self._get_anonymized_value,
                 'replacement_list': self.replacement_value_map['email'],
                 'current_value': None
             },
             'street_name': {
-                'function': self.__get_anonymized_value,
+                'function': self._get_anonymized_value,
                 'replacement_list': self.replacement_value_map['street_name'],
                 'current_value': None
             },
             'city': {
-                'function': self.__get_anonymized_value,
+                'function': self._get_anonymized_value,
                 'replacement_list': self.replacement_value_map['city'],
                 'current_value': None
             },
-            'post_code': self.__get_random_postcode,
-            'phone': self.__get_random_nz_phone
+            'post_code': self._get_random_postcode,
+            'phone': self._get_random_nz_phone
         }
 
         if self.replacement_value_map is not None:
             for replacement_list_key in self.replacement_value_map:
                 self.function_map[replacement_list_key] = {
-                    'function': self.__get_anonymized_value,
+                    'function': self._get_anonymized_value,
                     'replacement_list': self.replacement_value_map[replacement_list_key],
                     'current_value': None
                 }
 
-    def __get_anonymized_value(self, source_list):
+    def _get_anonymized_value(self, source_list):
         return choice(source_list)
         # return source_list[randint(0, len(source_list) - 1)]
 
-    def __randomize_digits(self, digits):
+    def _randomize_digits(self, digits):
         new_digits = ''
         for _ in range(len(digits)):
             new_digits = new_digits + str(randint(0, 9))
         return new_digits
 
-    def __randomize_chars(self, chars):
+    def _randomize_chars(self, chars):
         new_word = ''
         for char in chars:
             if char.islower():
@@ -152,12 +155,12 @@ class RecordAnonymizer():
                 new_word = new_word + choice(self.LETTERS_UPPER)
         return new_word
 
-    def __get_random_postcode(self, _):
+    def _get_random_postcode(self, _):
         if self.post_code is None:
             self.post_code = str(randint(1000, 9999))
         return self.post_code
 
-    def __get_random_nz_phone(self, _):
+    def _get_random_nz_phone(self, _):
         if self.phone is None:
             self.phone = '642' + str(randint(10000000, 99999999))
         return self.phone
@@ -222,7 +225,7 @@ if __name__ == '__main__':
         prog='Basic Data Anonymizer',
         description='Use this script to replace sensitive data with randomized data.'
     )
-    
+
     parser.add_argument('--pattern-file-path', '-pf',
                         type=pathlib.Path,
                         default=pattern_file,
@@ -251,7 +254,7 @@ if __name__ == '__main__':
                         'values are selected to be populated into the replacement lists. '
                         'Default: 0')
     parser.add_argument('--replace-empty-values', '-re',
-                        action=argparse.BooleanOptionalAction,
+                        action='store_true',
                         help='If this argument is passed then empty values in the input data '
                         'will be populated with anonymized data. By default blank values are not '
                         'populated with anything, left are left empty.')
@@ -323,7 +326,7 @@ if __name__ == '__main__':
         df = df.astype(str)
         logger.info('Loaded all files successfully, beginning anonymization')
 
-        anonymizer = AnonymizerConfigurator(field_pattern_mapping=field_to_pattern, 
+        anonymizer = AnonymizerConfigurator(field_pattern_mapping=field_to_pattern,
                                             custom_replacement_values=user_replacement_values,
                                             config_options=option_config)
 
