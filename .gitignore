@@ -1,4 +1,5 @@
 /.vscode
+__pycache__/
 /demo/output.csv
 /patterns.ini
 /anonymizer.log
