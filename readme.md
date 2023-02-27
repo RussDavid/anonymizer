@@ -53,7 +53,7 @@ Features:
         <td>Brown</td>
         <td>31561</td>
         <td>tree15@example.com</td>
-        <td>tree15@example.com:10 :Auckland:0632</td>
+        <td>tree15@example.com:10 John Drive:Auckland:0632</td>
     </tr>
     <tr>
         <td>Mary</td>
