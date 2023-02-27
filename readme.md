@@ -53,7 +53,7 @@ Features:
         <td>Brown</td>
         <td>31561</td>
         <td>tree15@example.com</td>
-        <td>tree15@example.com:123 Main Street:Auckland:0632</td>
+        <td>tree15@example.com:10 :Auckland:0632</td>
     </tr>
     <tr>
         <td>Mary</td>
@@ -187,13 +187,13 @@ We now need to create a regular expression that can match a username that starts
 This will match values such as: ben123, jim321, KEV1<br>
 But will not match values such as: 123Ben123, Jim, 3212, Doe321a
 
-Once we have defined the pattern that will match the data we want anonymized we wrap this pattern in a named group, the name of this group corresponds to the name of the replacement list values we define. 
+Once we have defined the pattern that will match the data we want anonymized we wrap this pattern in a named group (named groups in patterns are marked with `(?P<group_name>...)`), the name of this group corresponds to the name of the replacement list values we define. 
 
-`^\w+\d+$` now becomes: `(?<username_vals>^\w+\d+$)` and we define this in our configuration file under the `[Regex_Patterns]` sections:
+`^\w+\d+$` now becomes: `(?P<username_vals>^\w+\d+$)` and we define this in our configuration file under the `[Regex_Patterns]` sections:
 
 ```
 [Regex_Patterns]
-username_pattern = (?<username_vals>^\w+\d+$)
+username_pattern = (?P<username_vals>^\w+\d+$)
 ```
 
 ### Create a Mapping Between Columns in Data and Regular Expressions
@@ -202,7 +202,7 @@ Now that we have defined a pattern to match the data in our `login_username` col
 
 ```
 [Regex_Patterns]
-username_pattern = (?<username_vals>^\w+\d+$)
+username_pattern = (?P<username_vals>^\w+\d+$)
 
 [Field_Mapping]
 LOGIN_USERNAME = username_pattern
@@ -212,11 +212,11 @@ LOGIN_USERNAME = username_pattern
 
 We need to create a list of dummy usernames that can be used to replace the sensitive data in LOGIN_USERNAME column. To do this we add the `[Replacement_Values]` section to our configuration file.
 
-The key in the `[Replacement_Values]` section is the name of the named group we defined in our regular expression earlier: `(?<username_vals>...)` the value is either a list of replacement values (format: `[A, B, C, ...]`) or a Path to a CSV file containing the values.
+The key in the `[Replacement_Values]` section is the name of the named group we defined in our regular expression earlier: `(?P<username_vals>...)` the value is either a list of replacement values (format: `[A, B, C, ...]`) or a Path to a CSV file containing the values.
 
 ```
 [Regex_Patterns]
-username_pattern = (?<username_vals>^\w+\d+$)
+username_pattern = (?P<username_vals>^\w+\d+$)
 
 [Field_Mapping]
 LOGIN_USERNAME = username_pattern
