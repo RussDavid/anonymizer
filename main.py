@@ -139,7 +139,15 @@ if __name__ == '__main__':
                     replacement_values = replacement_values.replace(', ', ',').split(',')
                     user_replacement_values[replacement_key] = replacement_values
 
-        df = pd.read_csv(args.data_file_path)
+        if not args.data_file_path.is_file():
+            raise FileNotFoundError
+        elif args.data_file_path.suffix == '.csv':
+            df = pd.read_csv(args.data_file_path)
+        elif args.data_file_path.suffix == '.xslx':
+            df = pd.read_excel(args.data_file_path)
+        else:
+            raise Exception(f'Invalid file format {args.data_file_path.suffix}')
+            
         logger.info(f'Input data has {len(df.columns)} columns and {len(df)} rows\n')
         df = df.astype(str)
         logger.info('Loaded all files successfully, beginning anonymization')
@@ -184,5 +192,6 @@ if __name__ == '__main__':
               'Field and column names are case-sensitive.')
     except Exception as e:
         print(traceback.format_exc())
+        print('Exception Occured:')
         print(e)
-        print('Some other exception occurred.')
+        
