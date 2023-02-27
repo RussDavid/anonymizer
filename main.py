@@ -147,7 +147,7 @@ if __name__ == '__main__':
             df = pd.read_excel(args.data_file_path)
         else:
             raise Exception(f'Invalid file format {args.data_file_path.suffix}')
-            
+
         logger.info(f'Input data has {len(df.columns)} columns and {len(df)} rows\n')
         df = df.astype(str)
         logger.info('Loaded all files successfully, beginning anonymization')
@@ -166,9 +166,9 @@ if __name__ == '__main__':
                 print(field)
                 df_anon = df_anon.rename(columns={field: field + argument_options['column_suffix']})
 
-        logger.info(f'Completed anonymization, writing to file: {output_file}')
+        logger.info(f'Completed anonymization, writing to file: {args.output_file_path}')
         df_anon = df_anon.replace('nan', '')
-        df_anon.to_csv(output_file, index=False)
+        df_anon.to_csv(args.output_file_path, index=False)
         print('Anonymized output:')
         print(df_anon)
     except configparser.NoSectionError as error:
@@ -194,4 +194,3 @@ if __name__ == '__main__':
         print(traceback.format_exc())
         print('Exception Occured:')
         print(e)
-        
