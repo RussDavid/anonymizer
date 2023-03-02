@@ -12,6 +12,12 @@ logger.name = logger.name.replace('main.', '')
 
 class AnonymizerConfigurator():
     NAMED_GROUP_PATTERN = re.compile(r'\(\?P<\w*>.+\)')
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(AnonymizerConfigurator, cls).__new__(cls)
+        return cls._instance
 
     def __init__(self, field_pattern_mapping,
                  custom_replacement_values,
@@ -23,6 +29,9 @@ class AnonymizerConfigurator():
         self.replace_empty = config_options['replace_empty']
         self.__validate_regex_patterns()
         self.__build_replacement_value_lists()
+        RecordAnonymizer.initialize_record_anonymizer(replacement_value_map=self.replacement_values,
+                                                      field_pattern_map=self.field_pattern_mapping,
+                                                      replace_empty_values=self.replace_empty)
 
     def __build_replacement_value_lists(self):
         logger.info('Generating values for replacement lists')
@@ -67,9 +76,6 @@ class AnonymizerConfigurator():
                                'it does not contain a named group')
 
     def anonymize_record(self, row):
-        RecordAnonymizer.initialize_record_anonymizer(replacement_value_map=self.replacement_values,
-                                                      field_pattern_map=self.field_pattern_mapping,
-                                                      replace_empty_values=self.replace_empty)
         anon = RecordAnonymizer(row=row)
         return anon.randomize_fields()
 
